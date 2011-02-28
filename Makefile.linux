@@ -1,0 +1,26 @@
+CC     = g++
+CFLAGS = -Wall -O3 
+LIB    = -L/usr/local/lib -L/tmp/ARToolKit/lib -lglut -lGL -lm -lARgsub -lAR -lOpenKN-controller -lOpenKN-vision -lOpenKN-image -lOpenKN-math -ljpeg -lpng
+OBJ    = main.o 
+RM     = rm -f
+BIN    = arTeapot
+INCLUDES = -I/usr/local/include/  -I/tmp/ARToolKit/include/
+
+all : $(OBJ)
+	$(CC) $(CFLAGS) $(OBJ) $(LIB) $(INCLUDES) -o $(BIN)
+	@echo "--------------------------------------------------------------"
+	@echo "----------   to execute type: $(BIN) &   -----------"
+	@echo "--------------------------------------------------------------"
+
+
+main.o : main.cpp
+	@echo "compile main"
+	$(CC) $(CFLAGS) $(INCLUDES) -c $<  
+	@echo "done..."
+
+clean :	
+	@echo "**************************"
+	@echo "CLEAN"
+	@echo "**************************"
+	$(RM) *~ $(OBJ) $(BIN)    
+
