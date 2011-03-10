@@ -1,0 +1,1 @@
+export LD_LIBRARY_PATH=/home/ens/biri/Lib/openkn-1.2/lib/:$LD_LIBRARY_PATH
