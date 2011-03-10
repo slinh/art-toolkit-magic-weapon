@@ -24,6 +24,7 @@
 //#include <OpenKN/vision/ProjectiveCamera.hpp>
 #include "ProjectiveCamera.hpp"
 #include "CameraCalibrationZhang.hpp"
+#include "ObjLoader.hpp"
 #include <OpenKN/vision/Homography.hpp>
 #include <OpenKN/math/InverseMatrix.hpp>
 
@@ -326,6 +327,7 @@ void draw3D()
 {
   setLightPosition();
 
+/*
   // teapot
   GLfloat colorTeapot[4]  = { 0.6f, 0.6f, 0.4f, 1.0f};
   glMaterialfv(GL_FRONT_AND_BACK,GL_AMBIENT_AND_DIFFUSE,colorTeapot);
@@ -335,7 +337,8 @@ void draw3D()
    glutSolidTeapot(markerSize/2);     
   glPopMatrix();
   // end teapot
-  
+*/
+
   // box
   glDisable(GL_LIGHTING);
   glColor3f(1.0,0.0,0.0);
