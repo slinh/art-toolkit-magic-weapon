@@ -53,7 +53,7 @@ typedef struct pattern{
 
 // camera calibration
 ProjectiveCamera projectiveCamera;// projective camera matrices
-const double markerSize = 15.0;   // size of the border of a marker, in your unit (i.e. cm)
+const double markerSize = 20.0;   // size of the border of a marker, in your unit (i.e. cm)
 const double near = 10.0;         // openGL frustum near parameter
 const double far  = 1000.0;       // openGL frustum far parameter
 float projectionMatrix[16];       // GL projection matrix
@@ -67,6 +67,15 @@ kn::ImageRGB8u webcamImage;       // webcam image
 // ARtoolkit 
 std::vector<pattern> patternList; // pattern list
 
+// models
+ObjLoader * loader;
+GLuint texHammer;
+unsigned char *  imageHammer;
+int mode = 0; // fill or line
+int marker = 0; // marker detected the most
+int marker_prev = 0; // previous marker 
+float modelview_prev[16];        // previous GL modelview matrix
+bool transition;  // check the switch between two markers
 
 ////////////////////////////////////////////////////////////////
 // prototypes
@@ -76,11 +85,15 @@ void updateTextures(const GLint &textureId, const unsigned char *imageData,
 		    const int &width, const int &height);
 void initCamera();
 void initAR();
+void initObj();
 void frameRate();
 void drawCorners(kn::ImageRGB8u &image, int markerId, ARMarkerInfo *marker_info);
 void drawFunc(void);
 void reshapeFunc(int, int);
 void idleFunc(void);
+void keyboardGL(unsigned char c, 
+		       int x, 
+		       int y);
 void kbdFunc(unsigned char key, int x, int y);
 void draw2D();
 void draw3D();
@@ -94,7 +107,61 @@ void setGL3dParameters(const ProjectiveCamera &Ptmp);
 void setLightPosition();
 void drawCube(kn::ImageRGB8u &image, const ProjectiveCamera &Ptmp);
 
+/////////////////////////////////////////////////////////////////////////
+/// loading ppm
+unsigned char * loadPPM(const char * const fn, 
+			unsigned int& w, 
+			unsigned int& h)
+{
 
+char head[70];
+  int i,j;
+  int d;
+  GLubyte * img = NULL;
+
+  FILE * f = fopen(fn, "r");
+
+  if(f==NULL){
+    fprintf(stderr,"Error in function readPPM : %s doesn't exist\n",fn);
+    exit(EXIT_FAILURE); 
+  }
+  fgets(head,70,f);
+
+  if(!strncmp(head, "P6", 2)){
+    i=0;
+    j=0;
+    while(i<3){
+      fgets(head,70,f);
+
+      if(head[0] == '#'){
+	continue;
+      }
+      if(i==0)
+	i += sscanf(head, "%d %d %d", &w, &h, &d);
+      else
+	if(i==1)
+	  i += sscanf(head, "%d %d", &h, &d);
+	else
+	  if(i==2)
+	    i += sscanf(head, "%d", &d);
+    }
+
+    img = (GLubyte*) malloc((size_t)(w) * (size_t)(h) * 3 * sizeof(GLubyte));
+    if(img==NULL){
+      fclose(f);
+      exit(EXIT_FAILURE); 
+    }
+
+    fread(img, sizeof(GLubyte), (size_t)w*(size_t)h*3,f);
+    fclose(f);
+  }
+  else{
+    fclose(f);
+    fprintf(stderr,"Error in function readPPM : %s isn't a PPM file\n",fn);
+  }
+  return img;
+
+}
 
 /////////////////////////////////////////////////////////////////////////
 /// camera initialisation
@@ -102,7 +169,7 @@ void initCamera()
 {
   // webcam setup
   kn::V4L2WebcamParams V4L2params("/dev/video0",   // device
-				  320,240,         // resolution
+				  640,480,         // resolution
 				  kn::FMT_YUYV,    // fmt
 				  kn::MMAP_METHOD, // MMAP or READ
 				  60);             // fps);
@@ -118,7 +185,7 @@ void initCamera()
   // load camera intrinsic parameters
   kn::Matrix<double> K(3,3);
   K.setIdentity();
-  K[0][0] = K[1][1] = 270.0;//sqrt(pow(webcamImage.width(),2)+pow(webcamImage.height(),2));
+  K[0][0] = K[1][1] = 520.0;//270.0;//sqrt(pow(webcamImage.width(),2)+pow(webcamImage.height(),2));
   K[0][2] = webcamImage.width()/2.0;
   K[1][2] = webcamImage.height()/2.0;
 
@@ -150,7 +217,7 @@ void initAR()
   // load your patterns
   pattern patt;
 
-  // patate de tomate !
+  // patate de tomate ! id=0
   if( (patt.patternId = arLoadPatt("markerData/patate2tomate.patt")) < 0 ) {
     std::cerr << "pattern load error (markerData/patate2tomate.patt)" << std::endl;
     exit(0);
@@ -161,7 +228,7 @@ void initAR()
 
   patternList.push_back(patt);
 
-  // lapin
+  // lapin id=1
   if( (patt.patternId = arLoadPatt("markerData/lapin.patt")) < 0 ) {
     std::cerr << "pattern load error (markerData/lapin.patt)" << std::endl;
     exit(0);
@@ -172,7 +239,7 @@ void initAR()
 
   patternList.push_back(patt);
 
-  // far
+  // far id=2
   if( (patt.patternId = arLoadPatt("markerData/far.patt")) < 0 ) {
     std::cerr << "pattern load error (markerData/far.patt)" << std::endl;
     exit(0);
@@ -184,7 +251,7 @@ void initAR()
   patternList.push_back(patt);
 
 
-  // half
+  // half id=3
   if( (patt.patternId = arLoadPatt("markerData/half.patt")) < 0 ) {
     std::cerr << "pattern load error (markerData/half.patt)" << std::endl;
     exit(0);
@@ -196,6 +263,13 @@ void initAR()
   patternList.push_back(patt);
 }
 
+/////////////////////////////////////////////////////////////////////////
+/// init obj
+void initObj(){
+  std::string str("models/hammer.obj");
+  loader = new ObjLoader(str);
+  loader->initGL();
+}
 
 /////////////////////////////////////////////////////////////////////////
 /// GL parameters initialisation
@@ -240,6 +314,24 @@ void initTextures(const kn::ImageRGB8u &myImage, GLuint &texId)
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, 
 	       myImage.width(), myImage.height(),
 	       0, GL_RGB, GL_UNSIGNED_BYTE, myImage.begin());
+
+  unsigned int hammerWidth, hammerHeight;
+ imageHammer = loadPPM("models/hammer.ppm", hammerWidth, hammerHeight);
+ if(imageHammer == NULL)
+   std::cout << "Error while loading hammer texture " << std::endl;
+
+  glGenTextures(1, &texHammer);
+  glBindTexture(GL_TEXTURE_2D, texHammer);
+
+  glTexParameterf(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  glTexParameterf(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  glTexParameterf(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S, GL_CLAMP);
+  glTexParameterf(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T, GL_CLAMP);
+  glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, 
+	       hammerWidth, hammerHeight,
+	       0, GL_RGB, GL_UNSIGNED_BYTE, imageHammer);
+
 }
 
 
@@ -288,7 +380,10 @@ void setGL3dParameters(const ProjectiveCamera &Ptmp)
   Ptmp.getGLProjectionMatrix(webcamImage.width(),webcamImage.height(),near,far,projectionMatrix);
  
   // Computes the new GL modelview matrix
-  Ptmp.getGLModelviewMatrix(modelviewMatrix);
+  if(transition)
+    Ptmp.getGLModelviewMatrix(modelview_prev);
+  else
+    Ptmp.getGLModelviewMatrix(modelviewMatrix);
 
   // Applying the computed projection matrix
   glMatrixMode(GL_PROJECTION);
@@ -296,7 +391,13 @@ void setGL3dParameters(const ProjectiveCamera &Ptmp)
    
   // Applying the computed modelview matrix
   glMatrixMode(GL_MODELVIEW);
-  glLoadMatrixf(modelviewMatrix);
+
+  if(transition)
+    glLoadMatrixf(modelview_prev);
+  else
+    glLoadMatrixf(modelviewMatrix);
+
+  glScalef(1.,1.,-1.);
 }
 
 
@@ -327,18 +428,58 @@ void draw3D()
 {
   setLightPosition();
 
-/*
-  // teapot
-  GLfloat colorTeapot[4]  = { 0.6f, 0.6f, 0.4f, 1.0f};
-  glMaterialfv(GL_FRONT_AND_BACK,GL_AMBIENT_AND_DIFFUSE,colorTeapot);
-  glPushMatrix();  
-   glTranslatef( markerSize/2, markerSize/2, markerSize/4);
-   glRotated(90,1.0,0.0,0.0); 
-   glutSolidTeapot(markerSize/2);     
-  glPopMatrix();
-  // end teapot
-*/
 
+ glEnable(GL_TEXTURE_2D);
+ glBindTexture(GL_TEXTURE_2D,texHammer);
+
+  if(marker == 1) // lapinou
+  { 
+    glPushMatrix();  
+  //   glTranslatef( markerSize/2, markerSize/2, markerSize/4);
+     glTranslatef( markerSize/2, markerSize/2, markerSize/4);
+     glScalef(100.f,100.f,100.f);
+     glRotated(-90,0.0,0.0,1.0); 
+     if(mode == 1)
+        glPolygonMode(GL_FRONT_AND_BACK,GL_LINE);
+     else
+        glPolygonMode(GL_FRONT_AND_BACK,GL_FILL);
+     loader->draw();    
+    glPopMatrix();
+  }
+
+  else if(marker == 2) // far
+  { 
+    glPushMatrix();  
+  //   glTranslatef( markerSize/2, markerSize/2, markerSize/4);
+     glTranslatef( markerSize/2, markerSize/2, (markerSize/4));
+     glScalef(100.f,100.f,100.f);
+     glRotated(-90,1.0,0.0,0.0); 
+     if(mode == 1)
+        glPolygonMode(GL_FRONT_AND_BACK,GL_LINE);
+     else
+        glPolygonMode(GL_FRONT_AND_BACK,GL_FILL);
+     loader->draw();    
+    glPopMatrix();
+  }
+  else if (marker == 3)   // half
+  {
+     glPushMatrix();  
+  //   glTranslatef( markerSize/2, markerSize/2, markerSize/4);
+     glTranslatef( (markerSize/2), (markerSize/2), 3*(markerSize/4));
+     glScalef(100.f,100.f,100.f);
+     glRotated(90,1.0,0.0,0.0);
+     glRotated(90,0.0,0.0,1.0);  
+     if(mode == 1)
+        glPolygonMode(GL_FRONT_AND_BACK,GL_LINE);
+     else
+        glPolygonMode(GL_FRONT_AND_BACK,GL_FILL);
+     loader->draw();    
+    glPopMatrix();
+
+  } 
+
+  glPolygonMode(GL_FRONT_AND_BACK,GL_FILL);
+/*
   // box
   glDisable(GL_LIGHTING);
   glColor3f(1.0,0.0,0.0);
@@ -364,6 +505,7 @@ void draw3D()
   glEnd();
   glEnable(GL_LIGHTING);
   // end box
+*/
 }
 
 
@@ -377,8 +519,20 @@ void drawFunc(void)
 
   // 3D
   glClear(GL_DEPTH_BUFFER_BIT);
+
+  // matrice print
+  if(transition)
+  {
+    std::cout << modelviewMatrix[0] <<" " << modelviewMatrix[1]  <<" " << modelviewMatrix[2]  <<" " << modelviewMatrix[3] << std::endl;
+    std::cout << modelviewMatrix[4]  <<" " << modelviewMatrix[5]  <<" " << modelviewMatrix[6]  <<" " << modelviewMatrix[7] << std::endl;
+    std::cout << modelviewMatrix[8]  <<" " << modelviewMatrix[9]  <<" " << modelviewMatrix[10]  <<" " << modelviewMatrix[11] << std::endl;
+    std::cout << modelviewMatrix[12]  <<" " << modelviewMatrix[13]  <<" " << modelviewMatrix[14]  <<" " << modelviewMatrix[15] << std::endl << std::endl;
+  }
+
   setGL3dParameters(projectiveCamera);
   draw3D();
+
+
 
   // finish
   glutSwapBuffers();
@@ -404,40 +558,85 @@ void reshapeFunc(int w,int h)
 // draw marker corners on the images
 void drawCorners(kn::ImageRGB8u &image, int markerNumber, ARMarkerInfo *marker_info)
 {
-  for(int m=0; m<markerNumber; m++)
+ for(int m=0; m<markerNumber; m++)
+   {
+     if(marker_info[m].cf<.2) continue;
+
+     // identify the pattern
+     int k = -1; // pattern id
+    for(int i=0; i<(int)patternList.size(); i++)
     {
-      if(marker_info[m].cf<0.2) continue;
+      if( patternList[i].patternId == marker_info[m].id ) {
+        switch(i)
+        {
+          case 0:
+//            std::cout << "patate de tomate" << std::endl;
+            break;
+          case 1:
+            std::cout << "lapin" << std::endl;
+            break;
 
-      // identify the pattern
-      int k = -1; // pattern id
-      for(int i=0; i<(int)patternList.size(); i++)
-	if( patternList[i].patternId == marker_info[m].id ) {
-	  if( k == -1 ) k = i;
-	  else if( marker_info[m].cf < marker_info[i].cf ) k = i;
-	}    
+          case 2:
+//            std::cout << "far" << std::endl;
+            break;
 
-      // if the marker is not identifyed, quit
-      if(k == -1) return;
+          case 3:
+            std::cout << "half" << std::endl;
+            break;
+          default:
+      
+            break;
+        }
 
-      // direction color
-      unsigned char white[3] = {255,255,255};
+        // retrieve the current marker
+        marker = i;
+        transition = (marker != marker_prev);
+        if(transition)
+        {
+          for (int j=0; j<16;++j)
+            modelview_prev[j] = modelviewMatrix[j];
 
-      // draw the 4 corners
-      for(int i=0; i<4; i++)
-      {
-	// one of the corner in white
-	unsigned char *color = patternList[i].color;
+          transition = true;
+        }
+        marker_prev = marker;      
 
-	if(i==marker_info[m].dir) color = white; // default color for corner
-	else color = patternList[k].color;
-	
-	drawDisc(webcamImage,
-	        (int)marker_info[m].vertex[i][0],
-		(int)marker_info[m].vertex[i][1],
-		3, 
-		color[0],color[1],color[2]);
-      }
+
+        if( k == -1 ) 
+          k = i;
+        else if( marker_info[m].cf < marker_info[i].cf ) 
+          k = i;
+       
+      }    
     }
+/*
+    marker = 1;
+    k=1;
+*/
+     // if the marker is not identifyed, quit
+     if(k == -1) return;
+
+     // direction color
+     unsigned char white[3] = {255,255,255};
+/*
+     // draw the 4 corners
+     for(int i=0; i<4; i++)
+     {
+       // one of the corner in white
+       unsigned char *color = patternList[0].color;
+
+       if(i == (4-marker_info[m].dir)%4) 
+          color = white; // default color for corner
+       else 
+          color = patternList[k].color;
+       drawDisc(webcamImage,
+                   (int)marker_info[m].vertex[i][0],
+                   (int)marker_info[m].vertex[i][1],
+                   3,
+                   color[0],color[1],color[2]);
+     }
+*/
+   }
+
 }
 
 
@@ -461,42 +660,42 @@ void drawCube(kn::ImageRGB8u &image, const ProjectiveCamera &Ptmp)
 // computes an homography between the detected pixels and the marker referencial
 kn::Matrix3x3d computeHomography(const ARMarkerInfo &marker_info)
 {
-  std::vector< std::pair< kn::Vector3d, kn::Vector3d > > correspondance2d2d;
+ std::vector< std::pair< kn::Vector3d, kn::Vector3d > > correspondance2d2d;
 
-  kn::Vector3d pt;
-  kn::Vector3d px(3);
-  pt[2] = px[2] = 1.0;
+ kn::Vector3d pt;
+ kn::Vector3d px(3);
+ pt[2] = px[2] = 1.0;
 
-  // corner 0
-  px[0] = marker_info.vertex[(0+marker_info.dir)%4][0];
-  px[1] = marker_info.vertex[(0+marker_info.dir)%4][1];
-  pt[0] = 0.0;
-  pt[1] = 0.0;
-  correspondance2d2d.push_back(std::pair<kn::Vector3d, kn::Vector3d>(pt,px));
+ // corner 0
+ px[0] = marker_info.vertex[(0+4-marker_info.dir)%4][0];
+ px[1] = marker_info.vertex[(0+4-marker_info.dir)%4][1];
+ pt[0] = 0.0;
+ pt[1] = 0.0;
+ correspondance2d2d.push_back(std::pair<kn::Vector3d, kn::Vector3d>(pt,px));
 
-  // corner 1
-  px[0] = marker_info.vertex[(1+marker_info.dir)%4][0];
-  px[1] = marker_info.vertex[(1+marker_info.dir)%4][1];
-  pt[0] = 0.0;
-  pt[1] = markerSize;
-  correspondance2d2d.push_back(std::pair<kn::Vector3d, kn::Vector3d>(pt,px));
+ // corner 1
+ px[0] = marker_info.vertex[(1+4-marker_info.dir)%4][0];
+ px[1] = marker_info.vertex[(1+4-marker_info.dir)%4][1];
+ pt[0] = 0.0;
+ pt[1] = markerSize;
+ correspondance2d2d.push_back(std::pair<kn::Vector3d, kn::Vector3d>(pt,px));
 
-  // corner 2
-  px[0] = marker_info.vertex[(2+marker_info.dir)%4][0];
-  px[1] = marker_info.vertex[(2+marker_info.dir)%4][1];
-  pt[0] = markerSize;
-  pt[1] = markerSize;
-  correspondance2d2d.push_back(std::pair<kn::Vector3d, kn::Vector3d>(pt,px));
+ // corner 2
+ px[0] = marker_info.vertex[(2+4-marker_info.dir)%4][0];
+ px[1] = marker_info.vertex[(2+4-marker_info.dir)%4][1];
+ pt[0] = markerSize;
+ pt[1] = markerSize;
+ correspondance2d2d.push_back(std::pair<kn::Vector3d, kn::Vector3d>(pt,px));
 
-  // corner 3
-  px[0] = marker_info.vertex[(3+marker_info.dir)%4][0];
-  px[1] = marker_info.vertex[(3+marker_info.dir)%4][1];
-  pt[0] = markerSize;
-  pt[1] = 0.0;
-  correspondance2d2d.push_back(std::pair<kn::Vector3d, kn::Vector3d>(pt,px));
- 
-  // compute the homography
-  return kn::computeHomography(correspondance2d2d,false);
+ // corner 3
+ px[0] = marker_info.vertex[(3+4-marker_info.dir)%4][0];
+ px[1] = marker_info.vertex[(3+4-marker_info.dir)%4][1];
+ pt[0] = markerSize;
+ pt[1] = 0.0;
+ correspondance2d2d.push_back(std::pair<kn::Vector3d, kn::Vector3d>(pt,px));
+
+ // compute the homography
+ return kn::computeHomography(correspondance2d2d,false);
 }
 
 
@@ -513,12 +712,12 @@ bool cameraCalibration(ProjectiveCamera &Ptmp,
   for(int m=0; m<markerNumber; m++)
     {
       if(marker_info[m].id == patternId)
-	if(marker_info[m].cf > cf)
-	  {
-	    k  = m;
-	    cf = marker_info[m].cf;
-	  }
-    }
+	      if(marker_info[m].cf > cf)
+        {
+          k  = m;
+          cf = marker_info[m].cf;
+        }
+     }
 
   // if not detected
   if(k == -1) return false;
@@ -552,7 +751,7 @@ void idleFunc(void)
   drawCorners(webcamImage,markerNumber,markerInfo);
 
   // check
-  for(int i=0; i<(int)patternList.size(); ++i)
+/*  for(int i=0; i<(int)patternList.size(); ++i)
     {
       // camera calibration
       if(cameraCalibration(projectiveCamera, markerNumber, patternList[i].patternId, markerInfo)){
@@ -560,9 +759,16 @@ void idleFunc(void)
       drawCube(webcamImage,projectiveCamera);
     }
   }
+*/ 
+
+  if(transition)
+    cameraCalibration(projectiveCamera, markerNumber, patternList[marker_prev].patternId, markerInfo);
+  else
+    cameraCalibration(projectiveCamera, markerNumber, patternList[marker].patternId, markerInfo);
+  drawCube(webcamImage,projectiveCamera);
 
   // GL 3D camera parameters
-  cameraCalibration(projectiveCamera, markerNumber, patternList[2].patternId, markerInfo);
+ // cameraCalibration(projectiveCamera, markerNumber, patternList[2].patternId, markerInfo);
   
   // texture update
   updateTextures(textureId,
@@ -579,9 +785,23 @@ void idleFunc(void)
 void kbdFunc(unsigned char key, int x, int y)
 { 
   switch (key)
-    {
-    case 27 : exit(0);
-    }
+  {
+  case 27 : 
+    exit(0); 
+    break;
+  case 'w':
+    GLint wtype[2];
+    glGetIntegerv(GL_POLYGON_MODE,wtype);
+    if(wtype[0]==GL_FILL)
+      mode = 1; // line
+    else
+      mode = 0;
+  default:
+    break;
+  }
+  glutPostRedisplay();
+    
+
 }
 
 
@@ -620,6 +840,10 @@ int main(int argc, char **argv)
   // init GL
   std::cout << "GL initialisation ..." << std::endl;
   initGL();
+
+  // init OBJ
+  std::cout << "Obj initialisation ..." << std::endl;
+  initObj();
 
   // init textures
   std::cout << "textures initialisation ..." << std::endl;
