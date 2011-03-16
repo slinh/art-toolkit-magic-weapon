@@ -11,9 +11,9 @@
 #include <iostream>
 #include <vector>
 
-#include "Obj.hpp"
+//#include "Obj.hpp"
 //#include "Bbox.hpp"
-#include "Texture.hpp"
+//#include "Texture.hpp"
 //#include "utils.hpp"
 
 ObjLoader::ObjLoader()

@@ -275,7 +275,7 @@ void initObj(){
   hammer->initGL();
   
   
-  std::string str2("models/hammer.obj");
+  std::string str2("models/sailor.obj");
   sailor = new ObjLoader(str2);
   sailor->initGL();
 }
@@ -518,7 +518,7 @@ void draw3D()
       glPushMatrix();  
     //   glTranslatef( markerSize/2, markerSize/2, markerSize/4);
        glTranslatef( markerSize/2, markerSize/2, markerSize/4);
-       glScalef(100.f,100.f,100.f);
+       glScalef(20.f,20.f,20.f);
        glRotated(-90,0.0,0.0,1.0); 
        if(mode == 1)
           glPolygonMode(GL_FRONT_AND_BACK,GL_LINE);
@@ -533,7 +533,7 @@ void draw3D()
       glPushMatrix();  
     //   glTranslatef( markerSize/2, markerSize/2, markerSize/4);
        glTranslatef( markerSize/2, markerSize/2, (markerSize/4));
-       glScalef(100.f,100.f,100.f);
+       glScalef(20.f,20.f,20.f);
        glRotated(-90,1.0,0.0,0.0); 
        if(mode == 1)
           glPolygonMode(GL_FRONT_AND_BACK,GL_LINE);
@@ -547,7 +547,7 @@ void draw3D()
        glPushMatrix();  
     //   glTranslatef( markerSize/2, markerSize/2, markerSize/4);
        glTranslatef( (markerSize/2), (markerSize/2), 3*(markerSize/4));
-       glScalef(100.f,100.f,100.f);
+       glScalef(20.f,20.f,20.f);
        glRotated(90,1.0,0.0,0.0);
        glRotated(90,0.0,0.0,1.0);  
        if(mode == 1)
@@ -603,14 +603,14 @@ void drawFunc(void)
   glClear(GL_DEPTH_BUFFER_BIT);
 
   // matrice print
-  if(transition)
+/*  if(transition)
   {
     std::cout << modelviewMatrix[0] <<" " << modelviewMatrix[1]  <<" " << modelviewMatrix[2]  <<" " << modelviewMatrix[3] << std::endl;
     std::cout << modelviewMatrix[4]  <<" " << modelviewMatrix[5]  <<" " << modelviewMatrix[6]  <<" " << modelviewMatrix[7] << std::endl;
     std::cout << modelviewMatrix[8]  <<" " << modelviewMatrix[9]  <<" " << modelviewMatrix[10]  <<" " << modelviewMatrix[11] << std::endl;
     std::cout << modelviewMatrix[12]  <<" " << modelviewMatrix[13]  <<" " << modelviewMatrix[14]  <<" " << modelviewMatrix[15] << std::endl << std::endl;
   }
-
+*/
   setGL3dParameters(projectiveCamera);
   draw3D();
 
@@ -881,7 +881,10 @@ void kbdFunc(unsigned char key, int x, int y)
   default:
   case 's':
     if(weapon == 0)
+    {
       weapon = 1;
+      std::cout << "sailor" << weapon << std::endl; 
+    }
     else
       weapon = 0;
     break;
