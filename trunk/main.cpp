@@ -68,10 +68,14 @@ kn::ImageRGB8u webcamImage;       // webcam image
 std::vector<pattern> patternList; // pattern list
 
 // models
-ObjLoader * loader;
+ObjLoader * hammer;
+ObjLoader * sailor;
 GLuint texHammer;
+GLuint texSailor;
 unsigned char *  imageHammer;
+unsigned char *  imageSailor;
 int mode = 0; // fill or line
+int weapon = 0; //0 hammer, 1 sailor
 int marker = 0; // marker detected the most
 int marker_prev = 0; // previous marker 
 float modelview_prev[16];        // previous GL modelview matrix
@@ -267,8 +271,13 @@ void initAR()
 /// init obj
 void initObj(){
   std::string str("models/hammer.obj");
-  loader = new ObjLoader(str);
-  loader->initGL();
+  hammer = new ObjLoader(str);
+  hammer->initGL();
+  
+  
+  std::string str2("models/hammer.obj");
+  sailor = new ObjLoader(str2);
+  sailor->initGL();
 }
 
 /////////////////////////////////////////////////////////////////////////
@@ -331,6 +340,26 @@ void initTextures(const kn::ImageRGB8u &myImage, GLuint &texId)
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, 
 	       hammerWidth, hammerHeight,
 	       0, GL_RGB, GL_UNSIGNED_BYTE, imageHammer);
+         
+  // sailor moon
+  
+  unsigned int sailorWidth, sailorHeight;
+ imageSailor = loadPPM("models/sailor.ppm", sailorWidth, sailorHeight);
+ if(imageSailor == NULL)
+   std::cout << "Error while loading hammer texture " << std::endl;
+
+  glGenTextures(1, &texSailor);
+  glBindTexture(GL_TEXTURE_2D, texSailor);
+
+  glTexParameterf(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  glTexParameterf(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  glTexParameterf(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S, GL_CLAMP);
+  glTexParameterf(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T, GL_CLAMP);
+  glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, 
+	       sailorWidth, sailorHeight,
+	       0, GL_RGB, GL_UNSIGNED_BYTE, imageSailor);
+
 
 }
 
@@ -428,56 +457,109 @@ void draw3D()
 {
   setLightPosition();
 
-
- glEnable(GL_TEXTURE_2D);
- glBindTexture(GL_TEXTURE_2D,texHammer);
-
-  if(marker == 1) // lapinou
-  { 
-    glPushMatrix();  
-  //   glTranslatef( markerSize/2, markerSize/2, markerSize/4);
-     glTranslatef( markerSize/2, markerSize/2, markerSize/4);
-     glScalef(100.f,100.f,100.f);
-     glRotated(-90,0.0,0.0,1.0); 
-     if(mode == 1)
-        glPolygonMode(GL_FRONT_AND_BACK,GL_LINE);
-     else
-        glPolygonMode(GL_FRONT_AND_BACK,GL_FILL);
-     loader->draw();    
-    glPopMatrix();
-  }
-
-  else if(marker == 2) // far
-  { 
-    glPushMatrix();  
-  //   glTranslatef( markerSize/2, markerSize/2, markerSize/4);
-     glTranslatef( markerSize/2, markerSize/2, (markerSize/4));
-     glScalef(100.f,100.f,100.f);
-     glRotated(-90,1.0,0.0,0.0); 
-     if(mode == 1)
-        glPolygonMode(GL_FRONT_AND_BACK,GL_LINE);
-     else
-        glPolygonMode(GL_FRONT_AND_BACK,GL_FILL);
-     loader->draw();    
-    glPopMatrix();
-  }
-  else if (marker == 3)   // half
+  if( weapon == 0)
   {
-     glPushMatrix();  
-  //   glTranslatef( markerSize/2, markerSize/2, markerSize/4);
-     glTranslatef( (markerSize/2), (markerSize/2), 3*(markerSize/4));
-     glScalef(100.f,100.f,100.f);
-     glRotated(90,1.0,0.0,0.0);
-     glRotated(90,0.0,0.0,1.0);  
-     if(mode == 1)
-        glPolygonMode(GL_FRONT_AND_BACK,GL_LINE);
-     else
-        glPolygonMode(GL_FRONT_AND_BACK,GL_FILL);
-     loader->draw();    
-    glPopMatrix();
+   glEnable(GL_TEXTURE_2D);
+   glBindTexture(GL_TEXTURE_2D,texHammer);
 
-  } 
+    if(marker == 1) // lapinou
+    { 
+      glPushMatrix();  
+    //   glTranslatef( markerSize/2, markerSize/2, markerSize/4);
+       glTranslatef( markerSize/2, markerSize/2, markerSize/4);
+       glScalef(100.f,100.f,100.f);
+       glRotated(-90,0.0,0.0,1.0); 
+       if(mode == 1)
+          glPolygonMode(GL_FRONT_AND_BACK,GL_LINE);
+       else
+          glPolygonMode(GL_FRONT_AND_BACK,GL_FILL);
+       hammer->draw();    
+      glPopMatrix();
+    }
 
+    else if(marker == 2) // far
+    { 
+      glPushMatrix();  
+    //   glTranslatef( markerSize/2, markerSize/2, markerSize/4);
+       glTranslatef( markerSize/2, markerSize/2, (markerSize/4));
+       glScalef(100.f,100.f,100.f);
+       glRotated(-90,1.0,0.0,0.0); 
+       if(mode == 1)
+          glPolygonMode(GL_FRONT_AND_BACK,GL_LINE);
+       else
+          glPolygonMode(GL_FRONT_AND_BACK,GL_FILL);
+       hammer->draw();    
+      glPopMatrix();
+    }
+    else if (marker == 3)   // half
+    {
+       glPushMatrix();  
+    //   glTranslatef( markerSize/2, markerSize/2, markerSize/4);
+       glTranslatef( (markerSize/2), (markerSize/2), 3*(markerSize/4));
+       glScalef(100.f,100.f,100.f);
+       glRotated(90,1.0,0.0,0.0);
+       glRotated(90,0.0,0.0,1.0);  
+       if(mode == 1)
+          glPolygonMode(GL_FRONT_AND_BACK,GL_LINE);
+       else
+          glPolygonMode(GL_FRONT_AND_BACK,GL_FILL);
+       hammer->draw();    
+      glPopMatrix();
+
+    } 
+  }
+  else 
+  {
+     glEnable(GL_TEXTURE_2D);
+     glBindTexture(GL_TEXTURE_2D,texSailor);
+
+    if(marker == 1) // lapinou
+    { 
+      glPushMatrix();  
+    //   glTranslatef( markerSize/2, markerSize/2, markerSize/4);
+       glTranslatef( markerSize/2, markerSize/2, markerSize/4);
+       glScalef(100.f,100.f,100.f);
+       glRotated(-90,0.0,0.0,1.0); 
+       if(mode == 1)
+          glPolygonMode(GL_FRONT_AND_BACK,GL_LINE);
+       else
+          glPolygonMode(GL_FRONT_AND_BACK,GL_FILL);
+       sailor->draw();    
+      glPopMatrix();
+    }
+
+    else if(marker == 2) // far
+    { 
+      glPushMatrix();  
+    //   glTranslatef( markerSize/2, markerSize/2, markerSize/4);
+       glTranslatef( markerSize/2, markerSize/2, (markerSize/4));
+       glScalef(100.f,100.f,100.f);
+       glRotated(-90,1.0,0.0,0.0); 
+       if(mode == 1)
+          glPolygonMode(GL_FRONT_AND_BACK,GL_LINE);
+       else
+          glPolygonMode(GL_FRONT_AND_BACK,GL_FILL);
+       sailor->draw();    
+      glPopMatrix();
+    }
+    else if (marker == 3)   // half
+    {
+       glPushMatrix();  
+    //   glTranslatef( markerSize/2, markerSize/2, markerSize/4);
+       glTranslatef( (markerSize/2), (markerSize/2), 3*(markerSize/4));
+       glScalef(100.f,100.f,100.f);
+       glRotated(90,1.0,0.0,0.0);
+       glRotated(90,0.0,0.0,1.0);  
+       if(mode == 1)
+          glPolygonMode(GL_FRONT_AND_BACK,GL_LINE);
+       else
+          glPolygonMode(GL_FRONT_AND_BACK,GL_FILL);
+       sailor->draw();    
+      glPopMatrix();
+
+    } 
+  }
+  
   glPolygonMode(GL_FRONT_AND_BACK,GL_FILL);
 /*
   // box
@@ -797,6 +879,11 @@ void kbdFunc(unsigned char key, int x, int y)
     else
       mode = 0;
   default:
+  case 's':
+    if(weapon == 0)
+      weapon = 1;
+    else
+      weapon = 0;
     break;
   }
   glutPostRedisplay();
